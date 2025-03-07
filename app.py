@@ -1,12 +1,15 @@
 from flask import Flask, render_template, request, jsonify
 import socketio
 import eventlet
+import converter as cv
 
 app = Flask(__name__)
 
 # Create SocketIO server with eventlet
 sio = socketio.Server(cors_allowed_origins="*")
 app.wsgi_app = socketio.WSGIApp(sio, app.wsgi_app)
+
+coords = ((0,0),(0,0))
 
 # Initialize 6x6 chess board
 INITIAL_BOARD = [
@@ -112,6 +115,7 @@ def get_board():
 def make_move():
     move = request.form['move'].strip()
     print(f"Move received: {move}")
+    coords = cv.chess_move_to_vector(move)
 
     if len(move) == 5 and move[2] == ' ':
         start = (6 - int(move[1]), ord(move[0]) - ord('a'))
@@ -152,3 +156,4 @@ def handle_move(sid, data):
 # Start server with eventlet
 if __name__ == '__main__':
     eventlet.wsgi.server(eventlet.listen(('127.0.0.1', 5000)), app)
+
