@@ -1,26 +1,26 @@
 import socketio
 
-# Connexion au serveur Flask-SocketIO
+print("🔌 Connected to Flask-SocketIO server")
 sio = socketio.Client()
 
 try:
-    sio.connect('http://127.0.0.1:5000')
-    print("🔌 Connecté au serveur Flask-SocketIO")
+    sio.connect('http://localhost:5000')
+    print("🔌 Connected to Flask-SocketIO server")
     
     while True:
-        move = input("📝 Entre ton coup (ex: d5 d4) : ").strip()
+        move = input("📝 Enter your move (ex: d5 d4): ").strip()
 
         if len(move) == 5 and move[2] == ' ':
-            print(f"📤 Envoi du coup : {move}")
+            print(f"📤 Sending move: {move}")
             sio.emit('move_from_real_board', {'move': move})
         else:
-            print("❌ Format incorrect ! Utilise le format : d5 d4")
+            print("❌ Incorrect format! Use the format: d5 d4")
 
 except Exception as e:
-    print(f"❌ Erreur : {e}")
+    print(f"❌ Error: {e}")
 
 finally:
     sio.disconnect()
-    print("🔌 Déconnecté du serveur")
+    print("🔌 Disconnected from server")
 
 
