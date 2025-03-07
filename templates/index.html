@@ -1,129 +1,109 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="fr">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Chess 6x6</title>
+    <title>Échecs 6x6</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js"></script>
     <style>
-        /* Styles to center all content */
         body {
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            margin: 0;
             font-family: Arial, sans-serif;
-            background-color: #f4f4f4;
-        }
-
-        .container {
             text-align: center;
-            padding: 20px;
-            background-color: #fff;
-            border-radius: 10px;
-            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
         }
-
-        table {
-            border-collapse: collapse;
-            margin: 0 auto;
+        #board {
+            display: grid;
+            grid-template-columns: repeat(6, 60px);
+            grid-template-rows: repeat(6, 60px);
+            gap: 2px;
+            margin: 20px auto;
+            width: fit-content;
         }
-
-        td {
+        .case {
             width: 60px;
             height: 60px;
-            text-align: center;
+            display: flex;
+            align-items: center;
+            justify-content: center;
             font-size: 24px;
             border: 1px solid black;
             cursor: pointer;
+            user-select: none;
         }
-
-        img {
-            width: 100%;
-            height: 100%;
+        .selected {
+            border: 3px solid yellow;
+            background-color: rgba(255, 255, 0, 0.3);
         }
+        .white { background-color: #eee; }
+        .black { background-color: #666; color: white; }
     </style>
 </head>
 <body>
-    <div class="container">
-        <h1>Chess 6x6</h1>
-        <table id="board"></table>
-    </div>
-
-    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
-    <script>
-    const socket = io.connect("http://localhost:5000");
-
-    socket.on("update_board", function(data) {
-        console.log("♟️ Board update!");
-        fetchBoard();  // Refresh the board by getting the server state
-    });
-    </script>
+    <h1>Échecs 6x6</h1>
+    <div id="board"></div>
 
     <script>
-        let selectedPiece = null;  // Variable to track the selected piece
-    
-        async function fetchBoard() {
-            const response = await fetch('/board');
-            const data = await response.json();
-            const board = data.board;
-            const boardElement = document.getElementById('board');
-            boardElement.innerHTML = '';
-    
-            board.forEach((row, i) => {
-                const tr = document.createElement('tr');
-                row.forEach((cell, j) => {
-                    const td = document.createElement('td');
-                    td.dataset.row = i;
-                    td.dataset.col = j;
-    
-                    if (cell !== ".") {
-                        const img = document.createElement('img');
-                        const color = cell === cell.toUpperCase() ? "w" : "b";  
-                        const piece = cell.toLowerCase();
-                        img.src = `/static/images/${color}${piece}.png`;  
-                        td.appendChild(img);
-                    }
-    
-                    td.addEventListener("click", handleCellClick);  // Add event handler for each cell
-                    tr.appendChild(td);
-                });
-                boardElement.appendChild(tr);
-            });
-        }
-    
-        function handleCellClick(event) {
-            const target = event.target;
-            const row = target.dataset.row;
-            const col = target.dataset.col;
-    
-            if (selectedPiece) {
-                const [startRow, startCol] = selectedPiece;
-                sendMove(startRow, startCol, row, col);
-                selectedPiece = null;  // Deselect after move
-            } else {
-                selectedPiece = [row, col];  // Select the piece
+        let selectedPiece = null;
+        const socket = io.connect("http://127.0.0.1:5000");
+
+        function createBoard(boardData) {
+            const boardElement = document.getElementById("board");
+            boardElement.innerHTML = "";  // Efface l'ancien plateau
+
+            for (let i = 0; i < 6; i++) {
+                for (let j = 0; j < 6; j++) {
+                    let cell = document.createElement("div");
+                    cell.classList.add("case", (i + j) % 2 === 0 ? "white" : "black");
+                    cell.dataset.position = `${String.fromCharCode(97 + j)}${6 - i}`;
+                    cell.textContent = boardData[i][j] !== "." ? boardData[i][j] : "";
+
+                    cell.addEventListener("click", function () {
+                        handleClick(this);
+                    });
+
+                    boardElement.appendChild(cell);
+                }
             }
         }
-    
-        async function sendMove(startRow, startCol, endRow, endCol) {
-            const move = `${String.fromCharCode(parseInt(startCol) + 97)}${6 - parseInt(startRow)} ${String.fromCharCode(parseInt(endCol) + 97)}${6 - parseInt(endRow)}`;
-            
-            const response = await fetch('/move', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+
+        function handleClick(cell) {
+            const position = cell.dataset.position;
+
+            if (!selectedPiece) {
+                if (cell.textContent !== "") {  // Vérifie qu'on clique sur une pièce
+                    selectedPiece = position;
+                    cell.classList.add("selected");
+                }
+            } else {
+                const move = `${selectedPiece} ${position}`;
+                sendMove(move);
+                selectedPiece = null;
+                document.querySelectorAll(".case").forEach(c => c.classList.remove("selected"));
+            }
+        }
+
+        function sendMove(move) {
+            fetch("/move", {
+                method: "POST",
+                headers: { "Content-Type": "application/x-www-form-urlencoded" },
                 body: `move=${move}`
+            })
+            .then(response => response.json())
+            .then(data => {
+                if (data.success) {
+                    createBoard(data.board);
+                } else {
+                    alert("Coup invalide !");
+                }
             });
-    
-            const result = await response.json();  // Get server response
-            if (result.success) {
-                fetchBoard();  // Refresh the board after a valid move
-            } else {
-                alert("Illegal move!");
-            }
         }
-    
-        fetchBoard();  // Load the board on startup
-    </script>    
+
+        socket.on("update_board", function(data) {
+            createBoard(data.board);
+        });
+
+        fetch("/board")
+            .then(response => response.json())
+            .then(data => createBoard(data.board));
+    </script>
 </body>
 </html>
