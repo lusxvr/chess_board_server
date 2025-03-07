@@ -33,6 +33,13 @@ def make_move():
         end = (6 - int(move[4]), ord(move[3]) - ord('a'))
 
         if game.move(start, end):
+            # Convert chess move to physical coordinates
+            physical_command = cv.chess_to_physical_coords(move)
+            print(f"Physical command: {physical_command}")
+            
+            # TODO: Send physical_command to Arduino
+            # This is where you'd add code to communicate with the Arduino
+            
             # Broadcast the updated board to all connected clients
             sio.emit('update_board', {
                 'board': game.get_board(),
