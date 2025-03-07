@@ -3,12 +3,30 @@ import socketio
 # Connexion au serveur Flask-SocketIO
 sio = socketio.Client()
 
+@sio.event
+def connect():
+    print("🔌 Connecté au serveur Flask-SocketIO")
+
+@sio.event
+def disconnect():
+    print("🔌 Déconnecté du serveur")
+
+@sio.on("update_board")
+def update_board(data):
+    board = data.get("board", [])
+    print("\n📜 Nouveau plateau :")
+    for row in board:
+        print(" ".join(row))
+    print()
+
 try:
     sio.connect('http://127.0.0.1:5000')
-    print("🔌 Connecté au serveur Flask-SocketIO")
-    
+
     while True:
-        move = input("📝 Entre ton coup (ex: d5 d4) : ").strip()
+        move = input("📝 Entre ton coup (ex: d5 d4) ou 'exit' pour quitter : ").strip()
+
+        if move.lower() == "exit":
+            break
 
         if len(move) == 5 and move[2] == ' ':
             print(f"📤 Envoi du coup : {move}")
@@ -21,6 +39,3 @@ except Exception as e:
 
 finally:
     sio.disconnect()
-    print("🔌 Déconnecté du serveur")
-
-
