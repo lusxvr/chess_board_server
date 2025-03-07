@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Échecs 6x6</title>
+    <style>
+        /* Styles pour centrer tout le contenu */
+        body {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+            font-family: Arial, sans-serif;
+            background-color: #f4f4f4;
+        }
+
+        .container {
+            text-align: center;
+            padding: 20px;
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 0 10px rgba(0, 0, 0, 0.1);
+        }
+
+        table {
+            border-collapse: collapse;
+            margin: 0 auto;
+        }
+
+        td {
+            width: 60px;
+            height: 60px;
+            text-align: center;
+            font-size: 24px;
+            border: 1px solid black;
+            cursor: pointer;
+        }
+
+        img {
+            width: 100%;
+            height: 100%;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>Échecs 6x6</h1>
+        <table id="board"></table>
+    </div>
+
+    <script src="https://cdn.socket.io/4.0.1/socket.io.min.js"></script>
+    <script>
+    const socket = io.connect("http://localhost:5000");
+
+    socket.on("update_board", function(data) {
+        console.log("♟️ Mise à jour du plateau !");
+        fetchBoard();  // Rafraîchir l'échiquier en récupérant l'état du serveur
+    });
+    </script>
+
+    <script>
+        let selectedPiece = null;  // Variable pour suivre la pièce sélectionnée
+    
+        async function fetchBoard() {
+            const response = await fetch('/board');
+            const data = await response.json();
+            const board = data.board;
+            const boardElement = document.getElementById('board');
+            boardElement.innerHTML = '';
+    
+            board.forEach((row, i) => {
+                const tr = document.createElement('tr');
+                row.forEach((cell, j) => {
+                    const td = document.createElement('td');
+                    td.dataset.row = i;
+                    td.dataset.col = j;
+    
+                    if (cell !== ".") {
+                        const img = document.createElement('img');
+                        const color = cell === cell.toUpperCase() ? "w" : "b";  
+                        const piece = cell.toLowerCase();
+                        img.src = `/static/images/${color}${piece}.png`;  
+                        td.appendChild(img);
+                    }
+    
+                    td.addEventListener("click", handleCellClick);  // Ajoute un gestionnaire d'événement pour chaque case
+                    tr.appendChild(td);
+                });
+                boardElement.appendChild(tr);
+            });
+        }
+    
+        function handleCellClick(event) {
+            const target = event.target;
+            const row = target.dataset.row;
+            const col = target.dataset.col;
+    
+            if (selectedPiece) {
+                const [startRow, startCol] = selectedPiece;
+                sendMove(startRow, startCol, row, col);
+                selectedPiece = null;  // Désélectionne après le coup
+            } else {
+                selectedPiece = [row, col];  // Sélectionne la pièce
+            }
+        }
+    
+        async function sendMove(startRow, startCol, endRow, endCol) {
+            const move = `${String.fromCharCode(parseInt(startCol) + 97)}${6 - parseInt(startRow)} ${String.fromCharCode(parseInt(endCol) + 97)}${6 - parseInt(endRow)}`;
+            
+            const response = await fetch('/move', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                body: `move=${move}`
+            });
+    
+            const result = await response.json();  // Récupérer la réponse du serveur
+            if (result.success) {
+                fetchBoard();  // Rafraîchir l’échiquier après un coup valide
+            } else {
+                alert("Mouvement illégal !");
+            }
+        }
+    
+        fetchBoard();  // Charger l’échiquier au démarrage
+    </script>    
+</body>
+</html>
