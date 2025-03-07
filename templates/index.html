@@ -1,11 +1,11 @@
 <!DOCTYPE html>
-<html lang="fr">
+<html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Échecs 6x6</title>
+    <title>Chess 6x6</title>
     <style>
-        /* Styles pour centrer tout le contenu */
+        /* Styles to center all content */
         body {
             display: flex;
             justify-content: center;
@@ -46,7 +46,7 @@
 </head>
 <body>
     <div class="container">
-        <h1>Échecs 6x6</h1>
+        <h1>Chess 6x6</h1>
         <table id="board"></table>
     </div>
 
@@ -55,13 +55,13 @@
     const socket = io.connect("http://localhost:5000");
 
     socket.on("update_board", function(data) {
-        console.log("♟️ Mise à jour du plateau !");
-        fetchBoard();  // Rafraîchir l'échiquier en récupérant l'état du serveur
+        console.log("♟️ Board update!");
+        fetchBoard();  // Refresh the board by getting the server state
     });
     </script>
 
     <script>
-        let selectedPiece = null;  // Variable pour suivre la pièce sélectionnée
+        let selectedPiece = null;  // Variable to track the selected piece
     
         async function fetchBoard() {
             const response = await fetch('/board');
@@ -85,7 +85,7 @@
                         td.appendChild(img);
                     }
     
-                    td.addEventListener("click", handleCellClick);  // Ajoute un gestionnaire d'événement pour chaque case
+                    td.addEventListener("click", handleCellClick);  // Add event handler for each cell
                     tr.appendChild(td);
                 });
                 boardElement.appendChild(tr);
@@ -100,9 +100,9 @@
             if (selectedPiece) {
                 const [startRow, startCol] = selectedPiece;
                 sendMove(startRow, startCol, row, col);
-                selectedPiece = null;  // Désélectionne après le coup
+                selectedPiece = null;  // Deselect after move
             } else {
-                selectedPiece = [row, col];  // Sélectionne la pièce
+                selectedPiece = [row, col];  // Select the piece
             }
         }
     
@@ -115,15 +115,15 @@
                 body: `move=${move}`
             });
     
-            const result = await response.json();  // Récupérer la réponse du serveur
+            const result = await response.json();  // Get server response
             if (result.success) {
-                fetchBoard();  // Rafraîchir l’échiquier après un coup valide
+                fetchBoard();  // Refresh the board after a valid move
             } else {
-                alert("Mouvement illégal !");
+                alert("Illegal move!");
             }
         }
     
-        fetchBoard();  // Charger l’échiquier au démarrage
+        fetchBoard();  // Load the board on startup
     </script>    
 </body>
 </html>
