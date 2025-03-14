@@ -39,7 +39,6 @@ def make_move():
 
         if game.move(start, end):
             # IMMEDIATELY broadcast the updated board to all clients
-            # This ensures the web interface updates right away
             sio.emit('update_board', {
                 'board': game.get_board(),
                 'turn': game.get_turn(),
@@ -55,19 +54,13 @@ def make_move():
                 arduino.send_command(physical_command)
                 print("✅ Move command sent to Arduino")
                 
-                # Wait for Arduino to complete the move
-                if arduino.wait_for_move_completion():
-                    print("✅ Physical move completed")
-                else:
-                    print("⚠️ Timeout waiting for move completion")
+                # Start black move detection in a background thread 
+                if game.get_turn() == "black":
+                    print("👁️ Black's turn - monitoring physical board")
+                    eventlet.spawn(handle_black_turn)  # Use eventlet.spawn instead of direct call
             except Exception as e:
                 print(f"❌ Failed to send command to Arduino: {e}")
             
-            # If it's now black's turn, monitor the physical board
-            if game.get_turn() == "black":
-                print("👁️ Black's turn - monitoring physical board")
-                handle_black_turn()
-                
             return jsonify({'success': True, 'board': game.get_board()})
 
     return jsonify({'success': False})
