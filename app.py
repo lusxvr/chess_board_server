@@ -5,7 +5,6 @@ import converter as cv
 from board import game
 from arduino_controller import ArduinoController
 import time
-import threading
 
 app = Flask(__name__)
 
@@ -15,9 +14,6 @@ app.wsgi_app = socketio.WSGIApp(sio, app.wsgi_app)
 
 # Initialize Arduino controller globally
 arduino = ArduinoController()
-
-# Track active threads to avoid duplicate monitoring
-active_black_monitoring = False
 
 @app.route('/')
 def index():
@@ -33,7 +29,7 @@ def get_board():
 
 @app.route('/move', methods=['POST'])
 def make_move():
-    """Handle moves from the web interface (white's moves)."""
+    """Handle moves from the web interface."""
     move = request.form['move'].strip()
     print(f"Move received: {move}")
     
@@ -43,115 +39,169 @@ def make_move():
 
         if game.move(start, end):
             # IMMEDIATELY broadcast the updated board to all clients
+            # This ensures the web interface updates right away
             sio.emit('update_board', {
                 'board': game.get_board(),
                 'turn': game.get_turn(),
                 'last_move': game.get_last_move()
             })
             
-            # Process the physical move in a separate thread
-            # BUT do not link it to the black move monitoring
+            # Convert chess move to physical coordinates
             physical_command = cv.chess_to_physical_coords(move)
-            threading.Thread(
-                target=execute_physical_move,
-                args=(physical_command,),
-                daemon=True
-            ).start()
+            print(f"Physical command: {physical_command}")
             
-            # Return success immediately
+            try:
+                # Send command to Arduino
+                arduino.send_command(physical_command)
+                print("✅ Move command sent to Arduino")
+                
+                # Wait for Arduino to complete the move
+                if arduino.wait_for_move_completion():
+                    print("✅ Physical move completed")
+                else:
+                    print("⚠️ Timeout waiting for move completion")
+            except Exception as e:
+                print(f"❌ Failed to send command to Arduino: {e}")
+            
+            # If it's now black's turn, monitor the physical board
+            if game.get_turn() == "black":
+                print("👁️ Black's turn - monitoring physical board")
+                handle_black_turn()
+                
             return jsonify({'success': True, 'board': game.get_board()})
 
     return jsonify({'success': False})
 
-def execute_physical_move(physical_command):
-    """Simply execute a physical move without any dependencies."""
-    try:
-        print(f"Executing physical move: {physical_command}")
-        arduino.send_command(physical_command)
-        print("✅ Physical move sent to Arduino")
-    except Exception as e:
-        print(f"❌ Error during physical move: {e}")
+# WebSocket events
+@sio.event
+def connect(sid, environ):
+    print(f"✅ Client {sid} connected")
+    # Send current game state to new client
+    sio.emit('update_board', {
+        'board': game.get_board(),
+        'turn': game.get_turn()
+    }, room=sid)
 
-# Completely separate function to monitor black's turn
-# This should run continuously in the background
-def start_continuous_monitoring():
-    """Start a continuous background monitoring process."""
-    threading.Thread(
-        target=continuous_board_monitor,
-        daemon=True
-    ).start()
-    print("🔄 Started continuous board monitoring")
+@sio.event
+def disconnect(sid):
+    print(f"❌ Client {sid} disconnected")
 
-def continuous_board_monitor():
-    """Continuously monitor the board state for changes."""
-    last_known_state = None
-    last_turn = None
+@sio.on('move_from_real_board')
+def handle_move(sid, data):
+    """Handle moves sent from the web client that were detected on the physical board."""
+    move = data['move']
+    print(f"📥 Move received from client {sid}: {move}")
+
+    if len(move) == 5 and move[2] == ' ':
+        start = (6 - int(move[1]), ord(move[0]) - ord('a'))
+        end = (6 - int(move[4]), ord(move[3]) - ord('a'))
+
+        if game.move(start, end):
+            print(f"✅ Move applied: {move}")
+            
+            # IMMEDIATELY broadcast the updated board to all connected clients
+            sio.emit('update_board', {
+                'board': game.get_board(),
+                'turn': game.get_turn(),
+                'last_move': game.get_last_move()
+            })
+            
+            # Physical actions and black's turn handling follow after the broadcast
+            if game.get_turn() == "black":
+                print("👁️ Black's turn - monitoring physical board")
+                handle_black_turn()
+        else:
+            print("❌ Invalid move")
+            sio.emit('move_rejected', {'message': 'Invalid move'}, room=sid)
+    else:
+        print("❌ Incorrect move format")
+        sio.emit('move_rejected', {'message': 'Incorrect move format'}, room=sid)
+
+def handle_black_turn():
+    """
+    Unified function to handle black's turn by monitoring the physical board.
+    """
+    print("🔍 Starting to monitor physical board for black's move...")
     
-    while True:
-        try:
-            current_turn = game.get_turn()
+    # Take an initial snapshot of the board
+    initial_state = get_current_board_state(verbose=True)  # Verbose for initial state
+    if not initial_state:
+        print("❌ Could not read initial board state")
+        return
+    
+    print("✅ Initial board state captured, waiting for move...")
+    
+    # Poll until we detect a change or it's no longer Black's turn
+    move_detected = False
+    attempts = 0
+    max_attempts = 100  # 100 seconds at 1s intervals
+    
+    while game.get_turn() == "black" and not move_detected and attempts < max_attempts:
+        # Wait a moment between checks
+        time.sleep(1)
+        attempts += 1
+        
+        # Print waiting message less frequently (every 30 seconds)
+        if attempts % 10 == 0:
+            print(f"Still waiting for physical move... ({attempts/2} seconds / {max_attempts/2} seconds)")
+        
+        # Read current state silently (non-verbose)
+        current_state = get_current_board_state(verbose=False)
+        if not current_state:
+            continue  # Skip this iteration if read failed
+        
+        # Check if a move was made
+        move = arduino.detect_move(initial_state, current_state)
+        if move:
+            # When a change is detected, print the current state
+            print(f"💡 Board state changed: {arduino.matrix_to_string(current_state)}")
+            print(f"Detected move from physical board: {move}")
             
-            # Only monitor when it's black's turn
-            if current_turn == "black":
-                # If we just switched to black's turn, reset our state
-                if last_turn != "black":
-                    print("👁️ Black's turn - starting to monitor physical board")
-                    time.sleep(2)  # Give time for physical move to complete
-                    last_known_state = get_current_board_state(verbose=True)
-                    if not last_known_state:
-                        print("❌ Could not read initial board state")
-                        time.sleep(1)
-                        continue
-                    print("✅ Initial black board state captured")
-                
-                # We have a valid last state, check for changes
-                if last_known_state:
-                    current_state = get_current_board_state(verbose=False)
-                    if not current_state:
-                        time.sleep(0.5)
-                        continue
-                    
-                    # Check if a move was made
-                    move = arduino.detect_move(last_known_state, current_state)
-                    if move:
-                        print(f"💡 Detected black's move: {move}")
-                        
-                        # Process the move
-                        start = (6 - int(move[1]), ord(move[0]) - ord('a'))
-                        end = (6 - int(move[4]), ord(move[3]) - ord('a'))
-                        
-                        if game.move(start, end):
-                            print(f"✅ Black's move applied: {move}")
-                            
-                            # IMMEDIATELY broadcast the updated board
-                            sio.emit('update_board', {
-                                'board': game.get_board(),
-                                'turn': game.get_turn(),
-                                'last_move': game.get_last_move()
-                            })
-                            
-                            # Reset state for next turn
-                            last_known_state = None
+            # Parse chess notation to board coordinates
+            # For A6 at (0,0):
+            # - 'a' -> column 0, 'b' -> column 1, etc.
+            # - '6' -> row 0, '5' -> row 1, etc.
+            start_file, start_rank = move[0], move[1]
+            end_file, end_rank = move[3], move[4]
             
-            # Update last turn
-            last_turn = current_turn
+            start = (6 - int(start_rank), ord(start_file) - ord('a'))
+            end = (6 - int(end_rank), ord(end_file) - ord('a'))
             
-            # Brief pause before next check
-            time.sleep(0.5)
-            
-        except Exception as e:
-            print(f"❌ Error in board monitor: {e}")
-            time.sleep(1)
+            if game.move(start, end):
+                print(f"✅ Move applied: {move}")
+                # Broadcast the updated board to all connected clients
+                sio.emit('update_board', {
+                    'board': game.get_board(),
+                    'turn': game.get_turn(),
+                    'last_move': game.get_last_move()
+                })
+                move_detected = True
+            else:
+                print("❌ Invalid move detected from physical board")
+    
+    if not move_detected and game.get_turn() == "black":
+        print("⚠️ Timed out waiting for physical move")
 
 def get_current_board_state(verbose=False):
-    """Helper function to get board state matrix from Arduino."""
+    """
+    Helper function to get board state matrix from Arduino
+    
+    Args:
+        verbose (bool): Whether to print verbose output
+    """
     try:
         # Read state from Arduino
         state_string = arduino.read_board_state(verbose)
         
         if state_string and len(state_string) == 36:
-            return arduino.board_state_to_matrix(state_string)
-        return None
+            matrix = arduino.board_state_to_matrix(state_string)
+            if verbose:
+                print(f"Board state: {state_string}")
+            return matrix
+        else:
+            if verbose:
+                print(f"Failed to get valid board state (received: {state_string})")
+            return None
     except Exception as e:
         if verbose:
             print(f"Error reading board state: {e}")
@@ -208,9 +258,6 @@ if __name__ == '__main__':
         # Connect to Arduino before starting server
         print("🔌 Connecting to Arduino...")
         arduino.connect()
-        
-        # Start continuous board monitoring
-        start_continuous_monitoring()
         
         print("🚀 Starting server...")
         eventlet.wsgi.server(eventlet.listen(('127.0.0.1', 5000)), app)
