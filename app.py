@@ -57,13 +57,51 @@ def make_move():
                 'last_move': game.get_last_move()
             })
             
-            # If it's now black's turn, start monitoring the physical board
+            # Debug: If this is a white move, wait 5 seconds and test Arduino communication
             if game.get_turn() == "black":
-                print("👁️ Black's turn - checking physical board")
-                # Start a non-blocking check (in a separate thread)
-                thread = threading.Thread(target=wait_for_physical_move)
-                thread.daemon = True
-                thread.start()
+                print("\n🔍 DEBUGGING: Waiting 5 seconds to test Arduino communication...")
+                
+                # Add this function to directly debug Arduino communication
+                def debug_arduino_communication():
+                    import time
+                    time.sleep(5)  # Wait 5 seconds
+                    
+                    print("🔍 DEBUGGING: Sending READ_BOARD command...")
+                    
+                    # Clear any existing data
+                    arduino.serial.reset_input_buffer()
+                    arduino.serial.reset_output_buffer()
+                    
+                    # Send command with proper line ending
+                    arduino.serial.write(b"READ_BOARD\n")
+                    arduino.serial.flush()
+                    
+                    # Wait for Arduino to process
+                    time.sleep(1)
+                    
+                    # Check if data is available
+                    available = arduino.serial.in_waiting
+                    print(f"🔍 DEBUGGING: Bytes available to read: {available}")
+                    
+                    if available > 0:
+                        # Read raw response
+                        raw_response = arduino.serial.readline()
+                        print(f"🔍 DEBUGGING: Raw bytes received: {raw_response}")
+                        
+                        # Try to decode
+                        try:
+                            decoded = raw_response.decode().strip()
+                            print(f"🔍 DEBUGGING: Decoded response: '{decoded}'")
+                            print(f"🔍 DEBUGGING: Response length: {len(decoded)}")
+                        except Exception as e:
+                            print(f"🔍 DEBUGGING: Error decoding response: {e}")
+                    else:
+                        print("🔍 DEBUGGING: No data received from Arduino")
+                
+                # Start debugging in a separate thread
+                debug_thread = threading.Thread(target=debug_arduino_communication)
+                debug_thread.daemon = True
+                debug_thread.start()
                 
             return jsonify({'success': True, 'board': game.get_board()})
 
