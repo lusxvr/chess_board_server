@@ -45,13 +45,33 @@ def make_move():
                 'last_move': game.get_last_move()
             })
             
-            # Trigger a separate Socket.IO event to handle the physical move
-            # This won't block the HTTP response
-            sio.emit('execute_physical_move', {
-                'move': move
-            })
+            # Convert chess move to physical coordinates
+            physical_command = cv.chess_to_physical_coords(move)
+            print(f"Physical command: {physical_command}")
             
-            # Return success immediately
+            # Create a background task to handle the Arduino move and subsequent black turn
+            # This ensures we don't block the response
+            @eventlet.spawn
+            def execute_physical_move_and_monitor():
+                try:
+                    # Send command to Arduino
+                    arduino.send_command(physical_command)
+                    print("✅ Move command sent to Arduino")
+                    
+                    # Wait for Arduino to complete the move
+                    if arduino.wait_for_move_completion():
+                        print("✅ Physical move completed")
+                    else:
+                        print("⚠️ Timeout waiting for move completion")
+                except Exception as e:
+                    print(f"❌ Failed to send command to Arduino: {e}")
+                
+                # If it's now black's turn, monitor the physical board
+                if game.get_turn() == "black":
+                    print("👁️ Black's turn - monitoring physical board")
+                    handle_black_turn()
+            
+            # Return success immediately, don't wait for physical move or black's turn
             return jsonify({'success': True, 'board': game.get_board()})
 
     return jsonify({'success': False})
@@ -236,34 +256,6 @@ def debug_arduino_communication():
 #                 return True
 #         time.sleep(0.1)
 #     return False
-
-# Add a Socket.IO event handler for executing physical moves
-@sio.on('execute_physical_move')
-def handle_physical_move(sid, data):
-    """Handle physical move execution without blocking the main request"""
-    move = data['move']
-    
-    # Convert chess move to physical coordinates
-    physical_command = cv.chess_to_physical_coords(move)
-    print(f"Physical command: {physical_command}")
-    
-    try:
-        # Send command to Arduino
-        arduino.send_command(physical_command)
-        print("✅ Move command sent to Arduino")
-        
-        # Wait for Arduino to complete the move
-        if arduino.wait_for_move_completion():
-            print("✅ Physical move completed")
-        else:
-            print("⚠️ Timeout waiting for move completion")
-    except Exception as e:
-        print(f"❌ Failed to send command to Arduino: {e}")
-    
-    # If it's black's turn after the move, monitor the physical board
-    if game.get_turn() == "black":
-        print("👁️ Black's turn - monitoring physical board")
-        handle_black_turn()
 
 if __name__ == '__main__':
     try:
