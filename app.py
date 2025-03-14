@@ -38,8 +38,7 @@ def make_move():
         end = (6 - int(move[4]), ord(move[3]) - ord('a'))
 
         if game.move(start, end):
-            # IMMEDIATELY broadcast the updated board to all clients
-            # This ensures the web interface updates right away
+            # Immediately broadcast the updated board to all clients
             sio.emit('update_board', {
                 'board': game.get_board(),
                 'turn': game.get_turn(),
@@ -50,24 +49,29 @@ def make_move():
             physical_command = cv.chess_to_physical_coords(move)
             print(f"Physical command: {physical_command}")
             
-            try:
-                # Send command to Arduino
-                arduino.send_command(physical_command)
-                print("✅ Move command sent to Arduino")
+            # Create a background task to handle the Arduino move and subsequent black turn
+            # This ensures we don't block the response
+            @eventlet.spawn
+            def execute_physical_move_and_monitor():
+                try:
+                    # Send command to Arduino
+                    arduino.send_command(physical_command)
+                    print("✅ Move command sent to Arduino")
+                    
+                    # Wait for Arduino to complete the move
+                    if arduino.wait_for_move_completion():
+                        print("✅ Physical move completed")
+                    else:
+                        print("⚠️ Timeout waiting for move completion")
+                except Exception as e:
+                    print(f"❌ Failed to send command to Arduino: {e}")
                 
-                # Wait for Arduino to complete the move
-                if arduino.wait_for_move_completion():
-                    print("✅ Physical move completed")
-                else:
-                    print("⚠️ Timeout waiting for move completion")
-            except Exception as e:
-                print(f"❌ Failed to send command to Arduino: {e}")
+                # If it's now black's turn, monitor the physical board
+                if game.get_turn() == "black":
+                    print("👁️ Black's turn - monitoring physical board")
+                    handle_black_turn()
             
-            # If it's now black's turn, monitor the physical board
-            if game.get_turn() == "black":
-                print("👁️ Black's turn - monitoring physical board")
-                handle_black_turn()
-                
+            # Return success immediately, don't wait for physical move or black's turn
             return jsonify({'success': True, 'board': game.get_board()})
 
     return jsonify({'success': False})
