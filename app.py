@@ -4,6 +4,8 @@ import eventlet
 import converter as cv
 from board import game
 from arduino_controller import ArduinoController
+import threading
+import time
 
 app = Flask(__name__)
 
@@ -100,11 +102,68 @@ def handle_move(sid, data):
         print("❌ Incorrect move format")
         sio.emit('move_rejected', {'message': 'Incorrect move format'}, room=sid)
 
+# Add a new function to continuously monitor the physical board
+def monitor_physical_board():
+    prev_state = None
+    
+    while True:
+        try:
+            # Only monitor when it's black's turn
+            if game.get_turn() == "black":
+                # Read current state from Arduino
+                state_string = arduino.read_board_state()
+                
+                if state_string:
+                    current_state = arduino.board_state_to_matrix(state_string)
+                    
+                    # If we have a previous state to compare with
+                    if prev_state:
+                        move = arduino.detect_move(prev_state, current_state)
+                        
+                        if move:
+                            print(f"Detected move from physical board: {move}")
+                            
+                            # Process the move through the same handler we use for web moves
+                            start = (6 - int(move[1]), ord(move[0]) - ord('a'))
+                            end = (6 - int(move[4]), ord(move[3]) - ord('a'))
+                            
+                            if game.move(start, end):
+                                print(f"✅ Move applied: {move}")
+                                # Broadcast the updated board to all connected clients
+                                sio.emit('update_board', {
+                                    'board': game.get_board(),
+                                    'turn': game.get_turn(),
+                                    'last_move': game.get_last_move()
+                                })
+                            else:
+                                print("❌ Invalid move detected from physical board")
+                    
+                    # Update previous state for next comparison
+                    prev_state = current_state
+            
+            # Wait a short time before checking again
+            time.sleep(0.5)
+            
+        except Exception as e:
+            print(f"Error monitoring physical board: {e}")
+            time.sleep(1)  # Wait longer on error
+
+# Add this before the if __name__ == '__main__' block
+def start_monitor_thread():
+    monitor_thread = threading.Thread(target=monitor_physical_board, daemon=True)
+    monitor_thread.start()
+    print("🔍 Physical board monitor started")
+
+# Modify the if __name__ == '__main__' block to start the monitoring thread
 if __name__ == '__main__':
     try:
         # Connect to Arduino before starting server
         print("🔌 Connecting to Arduino...")
         arduino.connect()
+        
+        # Start physical board monitoring
+        start_monitor_thread()
+        
         print("🚀 Starting server...")
         eventlet.wsgi.server(eventlet.listen(('127.0.0.1', 5000)), app)
     except Exception as e:
