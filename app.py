@@ -34,8 +34,15 @@ def make_move():
     print(f"Move received: {move}")
     
     if len(move) == 5 and move[2] == ' ':
-        start = (6 - int(move[1]), ord(move[0]) - ord('a'))
-        end = (6 - int(move[4]), ord(move[3]) - ord('a'))
+        # Parse chess notation to board coordinates
+        # For A6 at (0,0):
+        # - 'a' -> column 0, 'b' -> column 1, etc.
+        # - '6' -> row 0, '5' -> row 1, etc.
+        start_file, start_rank = move[0], move[1]
+        end_file, end_rank = move[3], move[4]
+        
+        start = (6 - int(start_rank), ord(start_file) - ord('a'))
+        end = (6 - int(end_rank), ord(end_file) - ord('a'))
 
         if game.move(start, end):
             # Convert chess move to physical coordinates
@@ -92,8 +99,15 @@ def handle_move(sid, data):
     print(f"📥 Move received from client {sid}: {move}")
 
     if len(move) == 5 and move[2] == ' ':
-        start = (6 - int(move[1]), ord(move[0]) - ord('a'))
-        end = (6 - int(move[4]), ord(move[3]) - ord('a'))
+        # Parse chess notation to board coordinates
+        # For A6 at (0,0):
+        # - 'a' -> column 0, 'b' -> column 1, etc.
+        # - '6' -> row 0, '5' -> row 1, etc.
+        start_file, start_rank = move[0], move[1]
+        end_file, end_rank = move[3], move[4]
+        
+        start = (6 - int(start_rank), ord(start_file) - ord('a'))
+        end = (6 - int(end_rank), ord(end_file) - ord('a'))
 
         if game.move(start, end):
             print(f"✅ Move applied: {move}")
@@ -118,7 +132,6 @@ def handle_move(sid, data):
 def handle_black_turn():
     """
     Unified function to handle black's turn by monitoring the physical board.
-    This eliminates the need for threading.
     """
     print("🔍 Starting to monitor physical board for black's move...")
     
@@ -156,9 +169,15 @@ def handle_black_turn():
             print(f"💡 Board state changed: {arduino.matrix_to_string(current_state)}")
             print(f"Detected move from physical board: {move}")
             
-            # Process the move
-            start = (6 - int(move[1]), ord(move[0]) - ord('a'))
-            end = (6 - int(move[4]), ord(move[3]) - ord('a'))
+            # Parse chess notation to board coordinates
+            # For A6 at (0,0):
+            # - 'a' -> column 0, 'b' -> column 1, etc.
+            # - '6' -> row 0, '5' -> row 1, etc.
+            start_file, start_rank = move[0], move[1]
+            end_file, end_rank = move[3], move[4]
+            
+            start = (6 - int(start_rank), ord(start_file) - ord('a'))
+            end = (6 - int(end_rank), ord(end_file) - ord('a'))
             
             if game.move(start, end):
                 print(f"✅ Move applied: {move}")

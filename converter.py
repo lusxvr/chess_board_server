@@ -18,14 +18,9 @@ def chess_to_physical_coords(chess_move):
     Convert chess notation (e.g., 'e2 e4') to physical coordinates.
     Returns a string command for the Arduino: 'MOVE xs ys xe ye'
     
-    Parameters:
-    - Square offset from origin: 5mm
-    - Square size: 30mm
-    - Center offset: 15mm (half square size)
-    
-    Example:
-    'a6' (top left in chess) -> (20, 20) in physical coordinates
-    'f1' (bottom right in chess) -> (170, 170) in physical coordinates
+    With A6 at (0,0):
+    - 'a' = leftmost column
+    - '6' = top row
     """
     # Split the move into start and end positions
     start_pos, end_pos = chess_move.split()
@@ -39,7 +34,7 @@ def chess_to_physical_coords(chess_move):
         # x = offset + (column * square_size) + (square_size / 2)
         # y = offset + (row * square_size) + (square_size / 2)
         x = (col * 30)  # Add 15mm to reach center
-        y = (row * 30) # Add 15mm to reach center
+        y = (row * 30)  # Add 15mm to reach center
         
         return x, y
     

@@ -117,7 +117,13 @@ class Chess6x6:
         return True
 
     def move(self, start, end):
-        """Attempts to make a move. Returns True if successful, False otherwise."""
+        """
+        Attempts to make a move. Returns True if successful, False otherwise.
+        
+        start and end are (row, col) tuples where:
+        - row 0 = rank 6 (top row)
+        - col 0 = file a (leftmost column)
+        """
         if self.is_valid_move(start, end):
             x1, y1 = start
             x2, y2 = end

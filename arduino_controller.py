@@ -114,11 +114,20 @@ class ArduinoController:
             return None
 
     def board_state_to_matrix(self, state_string):
-        """Convert the 36-digit string to a 6x6 matrix representation"""
+        """
+        Convert the 36-digit string to a 6x6 matrix representation
+        
+        With (0,0) at A6 (top-left corner):
+        - First row (index 0) corresponds to rank 6
+        - First column (index 0) corresponds to file 'a'
+        - Last row (index 5) corresponds to rank 1
+        - Last column (index 5) corresponds to file 'f'
+        """
         if not state_string or len(state_string) != 36:
             return None
         
         # Convert string to 6x6 matrix
+        # The first 6 digits are the top row (A6-F6)
         matrix = []
         for i in range(6):
             row = []
@@ -127,13 +136,16 @@ class ArduinoController:
                 row.append(int(state_string[index]))
             matrix.append(row)
         
-        print(f"Converted to matrix: {matrix}")
         return matrix
 
     def detect_move(self, previous_state, current_state):
         """
         Detect a move by comparing previous and current board states
         Returns move in chess notation (e.g., 'e2 e4')
+        
+        Using (0,0) at A6, the chess notation mapping is:
+        - Row 0 = rank 6, Row 1 = rank 5, etc.
+        - Column 0 = file a, Column 1 = file b, etc.
         """
         if not previous_state or not current_state:
             return None
@@ -152,19 +164,30 @@ class ArduinoController:
         # A valid move has one removal and one addition
         if len(removed) == 1 and len(added) == 1:
             # Convert to chess notation
-            cols = {0: 'f', 1: 'e', 2: 'd', 3: 'c', 4: 'b', 5: 'a'}
-            rows = {0: '6', 1: '5', 2: '4', 3: '3', 4: '2', 5: '1'}
+            # Files: column index directly maps to a-f (0=a, 1=b, etc.)
+            # Ranks: row index maps to 6-1 (0=6, 1=5, etc.)
+            files = {0: 'a', 1: 'b', 2: 'c', 3: 'd', 4: 'e', 5: 'f'}
+            ranks = {0: '6', 1: '5', 2: '4', 3: '3', 4: '2', 5: '1'}
             
-            from_square = f"{cols[removed[0][1]]}{rows[removed[0][0]]}"
-            to_square = f"{cols[added[0][1]]}{rows[added[0][0]]}"
+            from_square = f"{files[removed[0][1]]}{ranks[removed[0][0]]}"
+            to_square = f"{files[added[0][1]]}{ranks[added[0][0]]}"
             
             return f"{from_square} {to_square}"
         
-        # Special case: capture (only piece removed)
+        # Special case: capture (one piece removed, another removed, one added)
         elif len(removed) == 2 and len(added) == 1:
-            # Figure out which removal is the capturing piece
-            # Logic would go here...
-            pass
+            # This is a capture - we need to determine which removal is the source
+            # For now, a simple heuristic - check which piece matches the player's color
+            # In a real implementation, you'd compare with the game state
+            files = {0: 'a', 1: 'b', 2: 'c', 3: 'd', 4: 'e', 5: 'f'}
+            ranks = {0: '6', 1: '5', 2: '4', 3: '3', 4: '2', 5: '1'}
+            
+            # For simplicity, assume the first removed piece is the source
+            # In a real implementation, you'd need more logic
+            from_square = f"{files[removed[0][1]]}{ranks[removed[0][0]]}"
+            to_square = f"{files[added[0][1]]}{ranks[added[0][0]]}"
+            
+            return f"{from_square} {to_square}"
         
         return None
 
