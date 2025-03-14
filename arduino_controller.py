@@ -20,15 +20,16 @@ class ArduinoController:
         """
         if port is None:
             # Try to find Arduino port automatically
-            ports = ['/dev/ttyACM0', '/dev/ttyACM1'] #list(serial.tools.list_ports.comports())
-            # for p in ports:
-            #     # Usually Arduino shows up as "USB-SERIAL CH340" or similar
-            #     if "USB" in p.description or "Arduino" in p.description:
-            #         port = p.device
-            #         break
-            # if port is None:
-            #     raise Exception("No Arduino found! Available ports: " + 
-            #                   str([p.device for p in ports]))
+            ports = list(serial.tools.list_ports.comports()) #['/dev/ttyACM0', '/dev/ttyACM1']
+            for p in ports:
+                # Usually Arduino shows up as "USB-SERIAL CH340" or similar
+                if "USB" in p.description or "Arduino" in p.description or "ACM" in p.description:
+                    port = p.device
+                    print(f"Found port: {port}")
+                    break
+            if port is None:
+                raise Exception("No Arduino found! Available ports: " + 
+                              str([p.device for p in ports]))
 
         try:
             self.serial = serial.Serial(port, self.baud_rate, timeout=1)
