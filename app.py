@@ -105,11 +105,22 @@ def handle_move(sid, data):
 # Add a new function to continuously monitor the physical board
 def monitor_physical_board():
     prev_state = None
+    current_turn = ""
     
     while True:
         try:
+            # Get current turn
+            new_turn = game.get_turn()
+            
             # Only monitor when it's black's turn
-            if game.get_turn() == "black":
+            if new_turn == "black":
+                # If we just entered black's turn, reset state
+                if current_turn != "black":
+                    print("👁️ Black's turn - starting board monitoring")
+                    prev_state = None
+                    # Wait a moment before first reading
+                    time.sleep(1)
+                
                 # Read current state from Arduino by sending READ_BOARD command
                 state_string = arduino.read_board_state()
                 
@@ -140,17 +151,21 @@ def monitor_physical_board():
                     
                     # Update previous state for next comparison
                     prev_state = current_state
-            else:
-                # Reset previous state when it's not black's turn
-                # This ensures we get a fresh comparison when black's turn begins
+            elif new_turn == "white":
+                # If we just entered white's turn, print a message
+                if current_turn != "white":
+                    print("⏸️ White's turn - pausing board monitoring")
                 prev_state = None
             
-            # Wait a short time before checking again
-            time.sleep(0.5)
+            # Update current turn
+            current_turn = new_turn
+            
+            # Add a significant delay between checks
+            time.sleep(1.0)
             
         except Exception as e:
             print(f"Error monitoring physical board: {e}")
-            time.sleep(1)  # Wait longer on error
+            time.sleep(2)  # Wait longer on error
 
 # Add this before the if __name__ == '__main__' block
 def start_monitor_thread():
