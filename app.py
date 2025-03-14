@@ -122,11 +122,8 @@ def handle_black_turn():
     """
     print("🔍 Starting to monitor physical board for black's move...")
     
-    # Debug the Arduino communication
-    #debug_arduino_communication()
-    
     # Take an initial snapshot of the board
-    initial_state = get_current_board_state()
+    initial_state = get_current_board_state(verbose=True)  # Verbose for initial state
     if not initial_state:
         print("❌ Could not read initial board state")
         return
@@ -143,18 +140,20 @@ def handle_black_turn():
         time.sleep(0.5)
         attempts += 1
         
-        # Every 10 attempts (5 seconds), print a debug message
+        # Print waiting message less frequently (every 30 seconds)
         if attempts % 10 == 0:
             print(f"Still waiting for physical move... ({attempts/2} seconds)")
         
-        # Read current state
-        current_state = get_current_board_state()
+        # Read current state silently (non-verbose)
+        current_state = get_current_board_state(verbose=False)
         if not current_state:
             continue  # Skip this iteration if read failed
         
         # Check if a move was made
         move = arduino.detect_move(initial_state, current_state)
         if move:
+            # When a change is detected, print the current state
+            print(f"💡 Board state changed: {arduino.matrix_to_string(current_state)}")
             print(f"Detected move from physical board: {move}")
             
             # Process the move
@@ -176,19 +175,29 @@ def handle_black_turn():
     if not move_detected and game.get_turn() == "black":
         print("⚠️ Timed out waiting for physical move")
 
-def get_current_board_state():
-    """Helper function to get board state matrix from Arduino"""
+def get_current_board_state(verbose=False):
+    """
+    Helper function to get board state matrix from Arduino
+    
+    Args:
+        verbose (bool): Whether to print verbose output
+    """
     try:
         # Read state from Arduino
-        state_string = arduino.read_board_state()
+        state_string = arduino.read_board_state(verbose)
         
         if state_string and len(state_string) == 36:
-            return arduino.board_state_to_matrix(state_string)
+            matrix = arduino.board_state_to_matrix(state_string)
+            if verbose:
+                print(f"Board state: {state_string}")
+            return matrix
         else:
-            print(f"Failed to get valid board state (received: {state_string})")
+            if verbose:
+                print(f"Failed to get valid board state (received: {state_string})")
             return None
     except Exception as e:
-        print(f"Error reading board state: {e}")
+        if verbose:
+            print(f"Error reading board state: {e}")
         return None
 
 def debug_arduino_communication():

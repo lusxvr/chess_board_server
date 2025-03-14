@@ -64,8 +64,13 @@ class ArduinoController:
             self.serial.close()
             print("Connection closed")
 
-    def read_board_state(self):
-        """Read the current state of the physical board from hall effect sensors"""
+    def read_board_state(self, verbose=False):
+        """
+        Read the current state of the physical board from hall effect sensors
+        
+        Args:
+            verbose (bool): Whether to print verbose output
+        """
         if not self.serial:
             raise Exception("Not connected to Arduino!")
         
@@ -74,36 +79,38 @@ class ArduinoController:
             self.serial.reset_input_buffer()
             self.serial.reset_output_buffer()
             
-            # Add debugging information
-            print("Sending READ_BOARD command to Arduino...")
+            if verbose:
+                print("Sending READ_BOARD command to Arduino...")
             
             # Send command with proper line ending
-            self.send_command("READ_BOARD")
-            #self.serial.flush()  # Ensure all data is written
+            self.serial.write(b"READ_BOARD\n")
+            self.serial.flush()
             
-            # Give Arduino time to process (increase if necessary)
-            #ime.sleep(0.5)  # Increased wait time
+            # Wait for Arduino to process
+            time.sleep(0.2)
             
-            # Check if data is available before reading
+            # Check if data is available
             available = self.serial.in_waiting
-            print(f"Bytes available to read: {available}")
             
             if available > 0:
-                # Read response line
+                # Read response
                 response = self.serial.readline().decode().strip()
-                print(f"Raw response from Arduino: '{response}'")
                 
-                # Check for a valid 36-character string of 0s and 1s
+                # Check for valid response format
                 if response and len(response) == 36 and all(c in '01' for c in response):
                     return response
                 else:
-                    print(f"Invalid response format. Length: {len(response)}, Content: '{response}'")
+                    if verbose:
+                        print(f"Invalid board state format: '{response}', length: {len(response)}")
+                    return None
             else:
-                print("No data received from Arduino")
+                if verbose:
+                    print("No data received from Arduino")
+                return None
             
-            return None
         except Exception as e:
-            print(f"Error reading board state: {e}")
+            if verbose:
+                print(f"Error reading board state: {e}")
             return None
 
     def board_state_to_matrix(self, state_string):
@@ -171,3 +178,15 @@ class ArduinoController:
                     return True
             time.sleep(0.1)
         return False
+
+    def matrix_to_string(self, matrix):
+        """Convert a 6x6 matrix back to a 36-character string for display"""
+        if not matrix or len(matrix) != 6:
+            return "Invalid matrix"
+        
+        result = ""
+        for row in matrix:
+            for cell in row:
+                result += str(cell)
+        
+        return result
