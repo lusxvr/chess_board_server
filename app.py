@@ -102,76 +102,69 @@ def handle_move(sid, data):
         print("❌ Incorrect move format")
         sio.emit('move_rejected', {'message': 'Incorrect move format'}, room=sid)
 
-# Add a new function to continuously monitor the physical board
-def monitor_physical_board():
-    prev_state = None
-    current_turn = ""
+@sio.on('update_board')
+def on_board_updated(data):
+    """Handle board updates - check physical board when it's Black's turn"""
+    current_turn = data.get('turn')
     
-    while True:
-        try:
-            # Get current turn
-            new_turn = game.get_turn()
-            
-            # Only monitor when it's black's turn
-            if new_turn == "black":
-                # If we just entered black's turn, reset state
-                if current_turn != "black":
-                    print("👁️ Black's turn - starting board monitoring")
-                    prev_state = None
-                    # Wait a moment before first reading
-                    time.sleep(1)
-                
-                # Read current state from Arduino by sending READ_BOARD command
-                state_string = arduino.read_board_state()
-                
-                if state_string:
-                    current_state = arduino.board_state_to_matrix(state_string)
-                    
-                    # If we have a previous state to compare with
-                    if prev_state:
-                        move = arduino.detect_move(prev_state, current_state)
-                        
-                        if move:
-                            print(f"Detected move from physical board: {move}")
-                            
-                            # Process the move
-                            start = (6 - int(move[1]), ord(move[0]) - ord('a'))
-                            end = (6 - int(move[4]), ord(move[3]) - ord('a'))
-                            
-                            if game.move(start, end):
-                                print(f"✅ Move applied: {move}")
-                                # Broadcast the updated board to all connected clients
-                                sio.emit('update_board', {
-                                    'board': game.get_board(),
-                                    'turn': game.get_turn(),
-                                    'last_move': game.get_last_move()
-                                })
-                            else:
-                                print("❌ Invalid move detected from physical board")
-                    
-                    # Update previous state for next comparison
-                    prev_state = current_state
-            elif new_turn == "white":
-                # If we just entered white's turn, print a message
-                if current_turn != "white":
-                    print("⏸️ White's turn - pausing board monitoring")
-                prev_state = None
-            
-            # Update current turn
-            current_turn = new_turn
-            
-            # Add a significant delay between checks
-            time.sleep(1.0)
-            
-        except Exception as e:
-            print(f"Error monitoring physical board: {e}")
-            time.sleep(2)  # Wait longer on error
+    if current_turn == "black":
+        # Start monitoring physical board for Black's move
+        print("👁️ Black's turn - checking physical board")
+        wait_for_physical_move()
 
-# Add this before the if __name__ == '__main__' block
-def start_monitor_thread():
-    monitor_thread = threading.Thread(target=monitor_physical_board, daemon=True)
-    monitor_thread.start()
-    print("🔍 Physical board monitor started")
+def wait_for_physical_move():
+    """Check the physical board until a valid move is detected"""
+    # Take an initial snapshot of the board
+    initial_state = get_current_board_state()
+    if not initial_state:
+        print("❌ Could not read initial board state")
+        return
+    
+    print("✅ Initial board state captured, waiting for move...")
+    
+    # Poll until we detect a change or it's no longer Black's turn
+    move_detected = False
+    while game.get_turn() == "black" and not move_detected:
+        # Wait a moment between checks
+        time.sleep(0.5)
+        
+        # Read current state
+        current_state = get_current_board_state()
+        if not current_state:
+            continue  # Skip this iteration if read failed
+        
+        # Check if a move was made
+        move = arduino.detect_move(initial_state, current_state)
+        if move:
+            print(f"Detected move from physical board: {move}")
+            
+            # Process the move
+            start = (6 - int(move[1]), ord(move[0]) - ord('a'))
+            end = (6 - int(move[4]), ord(move[3]) - ord('a'))
+            
+            if game.move(start, end):
+                print(f"✅ Move applied: {move}")
+                # Broadcast the updated board to all connected clients
+                sio.emit('update_board', {
+                    'board': game.get_board(),
+                    'turn': game.get_turn(),
+                    'last_move': game.get_last_move()
+                })
+                move_detected = True
+            else:
+                print("❌ Invalid move detected from physical board")
+
+def get_current_board_state():
+    """Helper function to get board state matrix from Arduino"""
+    try:
+        # Read state from Arduino
+        state_string = arduino.read_board_state()
+        if state_string and len(state_string) == 36:
+            return arduino.board_state_to_matrix(state_string)
+        return None
+    except Exception as e:
+        print(f"Error reading board state: {e}")
+        return None
 
 # Modify the if __name__ == '__main__' block to start the monitoring thread
 if __name__ == '__main__':
@@ -179,9 +172,6 @@ if __name__ == '__main__':
         # Connect to Arduino before starting server
         print("🔌 Connecting to Arduino...")
         arduino.connect()
-        
-        # Start physical board monitoring
-        start_monitor_thread()
         
         print("🚀 Starting server...")
         eventlet.wsgi.server(eventlet.listen(('127.0.0.1', 5000)), app)
