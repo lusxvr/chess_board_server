@@ -38,8 +38,8 @@ def chess_to_physical_coords(chess_move):
         # Calculate physical coordinates
         # x = offset + (column * square_size) + (square_size / 2)
         # y = offset + (row * square_size) + (square_size / 2)
-        x = 5 + (col * 30) + 15  # Add 15mm to reach center
-        y = 5 + (row * 30) + 15  # Add 15mm to reach center
+        x = (col * 30)  # Add 15mm to reach center
+        y = (row * 30) # Add 15mm to reach center
         
         return x, y
     
