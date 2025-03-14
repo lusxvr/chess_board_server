@@ -5,6 +5,7 @@ import converter as cv
 from board import game
 from arduino_controller import ArduinoController
 import time
+import threading
 
 app = Flask(__name__)
 
@@ -45,36 +46,43 @@ def make_move():
                 'last_move': game.get_last_move()
             })
             
-            # Convert chess move to physical coordinates
-            physical_command = cv.chess_to_physical_coords(move)
-            print(f"Physical command: {physical_command}")
+            # Start a thread to handle the physical move
+            physical_move_thread = threading.Thread(
+                target=physical_move_handler,
+                args=(move, game.get_turn()),
+                daemon=True
+            )
+            physical_move_thread.start()
             
-            # Create a background task to handle the Arduino move and subsequent black turn
-            # This ensures we don't block the response
-            @eventlet.spawn
-            def execute_physical_move_and_monitor():
-                try:
-                    # Send command to Arduino
-                    arduino.send_command(physical_command)
-                    print("✅ Move command sent to Arduino")
-                    
-                    # Wait for Arduino to complete the move
-                    if arduino.wait_for_move_completion():
-                        print("✅ Physical move completed")
-                    else:
-                        print("⚠️ Timeout waiting for move completion")
-                except Exception as e:
-                    print(f"❌ Failed to send command to Arduino: {e}")
-                
-                # If it's now black's turn, monitor the physical board
-                if game.get_turn() == "black":
-                    print("👁️ Black's turn - monitoring physical board")
-                    handle_black_turn()
-            
-            # Return success immediately, don't wait for physical move or black's turn
+            # Return success immediately without waiting for the thread
             return jsonify({'success': True, 'board': game.get_board()})
 
     return jsonify({'success': False})
+
+def physical_move_handler(move, turn):
+    """Background thread function to handle physical moves and monitoring"""
+    try:
+        # Convert chess move to physical coordinates
+        physical_command = cv.chess_to_physical_coords(move)
+        print(f"Physical command: {physical_command}")
+        
+        # Send command to Arduino
+        arduino.send_command(physical_command)
+        print("✅ Move command sent to Arduino")
+        
+        # Wait for Arduino to complete the move
+        if arduino.wait_for_move_completion():
+            print("✅ Physical move completed")
+        else:
+            print("⚠️ Timeout waiting for move completion")
+            
+        # If it's black's turn, monitor the physical board
+        if turn == "black":
+            print("👁️ Black's turn - monitoring physical board")
+            handle_black_turn()
+            
+    except Exception as e:
+        print(f"❌ Error in physical move thread: {e}")
 
 # WebSocket events
 @sio.event
@@ -103,17 +111,21 @@ def handle_move(sid, data):
         if game.move(start, end):
             print(f"✅ Move applied: {move}")
             
-            # IMMEDIATELY broadcast the updated board to all connected clients
+            # Immediately broadcast the updated board to all connected clients
             sio.emit('update_board', {
                 'board': game.get_board(),
                 'turn': game.get_turn(),
                 'last_move': game.get_last_move()
             })
             
-            # Physical actions and black's turn handling follow after the broadcast
+            # Start a thread for physical handling if it's black's turn
             if game.get_turn() == "black":
-                print("👁️ Black's turn - monitoring physical board")
-                handle_black_turn()
+                physical_move_thread = threading.Thread(
+                    target=lambda: handle_black_turn(),
+                    daemon=True
+                )
+                physical_move_thread.start()
+                
         else:
             print("❌ Invalid move")
             sio.emit('move_rejected', {'message': 'Invalid move'}, room=sid)
