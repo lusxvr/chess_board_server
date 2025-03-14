@@ -49,6 +49,13 @@ def make_move():
             physical_command = cv.chess_to_physical_coords(move)
             print(f"Physical command: {physical_command}")
             
+            # Broadcast the updated board to all clients
+            sio.emit('update_board', {
+                'board': game.get_board(),
+                'turn': game.get_turn(),
+                'last_move': game.get_last_move()
+            })
+
             try:
                 # Send command to Arduino
                 arduino.send_command(physical_command)
@@ -61,13 +68,7 @@ def make_move():
                     print("⚠️ Timeout waiting for move completion")
             except Exception as e:
                 print(f"❌ Failed to send command to Arduino: {e}")
-            
-            # Broadcast the updated board to all clients
-            sio.emit('update_board', {
-                'board': game.get_board(),
-                'turn': game.get_turn(),
-                'last_move': game.get_last_move()
-            })
+        
             
             # If it's now black's turn, monitor the physical board
             if game.get_turn() == "black":

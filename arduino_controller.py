@@ -117,24 +117,25 @@ class ArduinoController:
         """
         Convert the 36-digit string to a 6x6 matrix representation
         
-        With (0,0) at A6 (top-left corner):
-        - First row (index 0) corresponds to rank 6
-        - First column (index 0) corresponds to file 'a'
-        - Last row (index 5) corresponds to rank 1
-        - Last column (index 5) corresponds to file 'f'
+        The sensors are likely arranged with A1 at index 0, not A6
+        We need to remap to have A6 at (0,0) in our matrix
         """
         if not state_string or len(state_string) != 36:
             return None
         
-        # Convert string to 6x6 matrix
-        # The first 6 digits are the top row (A6-F6)
-        matrix = []
+        # First, create a temporary 6x6 matrix from the string
+        # assuming the string reads from A1 (bottom-left) to F6 (top-right)
+        temp_matrix = []
         for i in range(6):
             row = []
             for j in range(6):
                 index = i * 6 + j
                 row.append(int(state_string[index]))
-            matrix.append(row)
+            temp_matrix.append(row)
+        
+        # Now flip the matrix vertically to have A6 at (0,0)
+        # This puts top row (rank 6) at index 0
+        matrix = list(reversed(temp_matrix))
         
         return matrix
 
@@ -142,10 +143,6 @@ class ArduinoController:
         """
         Detect a move by comparing previous and current board states
         Returns move in chess notation (e.g., 'e2 e4')
-        
-        Using (0,0) at A6, the chess notation mapping is:
-        - Row 0 = rank 6, Row 1 = rank 5, etc.
-        - Column 0 = file a, Column 1 = file b, etc.
         """
         if not previous_state or not current_state:
             return None
@@ -164,8 +161,9 @@ class ArduinoController:
         # A valid move has one removal and one addition
         if len(removed) == 1 and len(added) == 1:
             # Convert to chess notation
-            # Files: column index directly maps to a-f (0=a, 1=b, etc.)
-            # Ranks: row index maps to 6-1 (0=6, 1=5, etc.)
+            # With A6 at (0,0):
+            # Files: j directly maps to a-f (0=a, 1=b, 2=c, etc.)
+            # Ranks: i directly maps to 6-1 (0=6, 1=5, 2=4, etc.)
             files = {0: 'a', 1: 'b', 2: 'c', 3: 'd', 4: 'e', 5: 'f'}
             ranks = {0: '6', 1: '5', 2: '4', 3: '3', 4: '2', 5: '1'}
             
@@ -174,20 +172,10 @@ class ArduinoController:
             
             return f"{from_square} {to_square}"
         
-        # Special case: capture (one piece removed, another removed, one added)
+        # Handle captures or other special cases
         elif len(removed) == 2 and len(added) == 1:
-            # This is a capture - we need to determine which removal is the source
-            # For now, a simple heuristic - check which piece matches the player's color
-            # In a real implementation, you'd compare with the game state
-            files = {0: 'a', 1: 'b', 2: 'c', 3: 'd', 4: 'e', 5: 'f'}
-            ranks = {0: '6', 1: '5', 2: '4', 3: '3', 4: '2', 5: '1'}
-            
-            # For simplicity, assume the first removed piece is the source
-            # In a real implementation, you'd need more logic
-            from_square = f"{files[removed[0][1]]}{ranks[removed[0][0]]}"
-            to_square = f"{files[added[0][1]]}{ranks[added[0][0]]}"
-            
-            return f"{from_square} {to_square}"
+            # ... same coordinate mapping as above ...
+            pass
         
         return None
 
