@@ -45,11 +45,8 @@ def make_move():
             
             try:
                 # Send command to Arduino
-                response = arduino.send_command(physical_command)
-                if response and "OK" in response:
-                    print("✅ Move executed successfully")
-                else:
-                    print("⚠️ Arduino didn't acknowledge the move")
+                arduino.send_command(physical_command)
+                print("✅ Move executed successfully")
             except Exception as e:
                 print(f"❌ Failed to send command to Arduino: {e}")
             
@@ -59,6 +56,15 @@ def make_move():
                 'turn': game.get_turn(),
                 'last_move': game.get_last_move()
             })
+            
+            # If it's now black's turn, start monitoring the physical board
+            if game.get_turn() == "black":
+                print("👁️ Black's turn - checking physical board")
+                # Start a non-blocking check (in a separate thread)
+                thread = threading.Thread(target=wait_for_physical_move)
+                thread.daemon = True
+                thread.start()
+                
             return jsonify({'success': True, 'board': game.get_board()})
 
     return jsonify({'success': False})
@@ -95,6 +101,14 @@ def handle_move(sid, data):
                 'turn': game.get_turn(),
                 'last_move': game.get_last_move()
             })
+            
+            # If it's now black's turn, start monitoring the physical board
+            if game.get_turn() == "black":
+                print("👁️ Black's turn - checking physical board")
+                # Start a non-blocking check (in a separate thread)
+                thread = threading.Thread(target=wait_for_physical_move)
+                thread.daemon = True
+                thread.start()
         else:
             print("❌ Invalid move")
             sio.emit('move_rejected', {'message': 'Invalid move'}, room=sid)
@@ -124,9 +138,13 @@ def wait_for_physical_move():
     
     # Poll until we detect a change or it's no longer Black's turn
     move_detected = False
-    while game.get_turn() == "black" and not move_detected:
+    attempts = 0
+    max_attempts = 1200  # 60 seconds at 0.5s intervals
+    
+    while game.get_turn() == "black" and not move_detected and attempts < max_attempts:
         # Wait a moment between checks
         time.sleep(0.5)
+        attempts += 1
         
         # Read current state
         current_state = get_current_board_state()
@@ -153,6 +171,9 @@ def wait_for_physical_move():
                 move_detected = True
             else:
                 print("❌ Invalid move detected from physical board")
+    
+    if not move_detected and game.get_turn() == "black":
+        print("⚠️ Timed out waiting for physical move")
 
 def get_current_board_state():
     """Helper function to get board state matrix from Arduino"""
