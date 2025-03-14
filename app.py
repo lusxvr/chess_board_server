@@ -43,123 +43,105 @@ def make_move():
 
         if game.move(start, end):
             # IMMEDIATELY broadcast the updated board to all clients
-            # This ensures the web interface updates right away
             sio.emit('update_board', {
                 'board': game.get_board(),
                 'turn': game.get_turn(),
                 'last_move': game.get_last_move()
             })
             
-            # Execute white's physical move in a thread
+            # Process the physical move in a separate thread
+            # BUT do not link it to the black move monitoring
             physical_command = cv.chess_to_physical_coords(move)
-            white_thread = threading.Thread(
-                target=execute_white_move,
+            threading.Thread(
+                target=execute_physical_move,
                 args=(physical_command,),
                 daemon=True
-            )
-            white_thread.start()
+            ).start()
             
+            # Return success immediately
             return jsonify({'success': True, 'board': game.get_board()})
 
     return jsonify({'success': False})
 
-def execute_white_move(physical_command):
-    """Execute white's physical move on the Arduino (runs in a thread)."""
+def execute_physical_move(physical_command):
+    """Simply execute a physical move without any dependencies."""
     try:
         print(f"Executing physical move: {physical_command}")
         arduino.send_command(physical_command)
         print("✅ Physical move sent to Arduino")
-        
-        # Optional: Wait for move completion
-        if arduino.wait_for_move_completion():
-            print("✅ Physical move completed")
-        
-        # After white's move completes, start monitoring for black's move
-        if game.get_turn() == "black":
-            start_black_turn_monitoring()
-            
     except Exception as e:
         print(f"❌ Error during physical move: {e}")
 
-def start_black_turn_monitoring():
-    """Start monitoring for black's physical move."""
-    global active_black_monitoring
-    
-    # Avoid starting multiple monitoring threads
-    if active_black_monitoring:
-        return
-        
-    active_black_monitoring = True
-    black_thread = threading.Thread(
-        target=monitor_black_turn,
+# Completely separate function to monitor black's turn
+# This should run continuously in the background
+def start_continuous_monitoring():
+    """Start a continuous background monitoring process."""
+    threading.Thread(
+        target=continuous_board_monitor,
         daemon=True
-    )
-    black_thread.start()
-    print("👁️ Started monitoring for black's move")
+    ).start()
+    print("🔄 Started continuous board monitoring")
 
-def monitor_black_turn():
-    """Monitor the physical board for black's move (runs in a thread)."""
-    global active_black_monitoring
+def continuous_board_monitor():
+    """Continuously monitor the board state for changes."""
+    last_known_state = None
+    last_turn = None
     
-    try:
-        print("🔍 Monitoring physical board for black's move...")
-        
-        # Take an initial snapshot of the board
-        initial_state = get_current_board_state(verbose=True)
-        if not initial_state:
-            print("❌ Could not read initial board state")
-            active_black_monitoring = False
-            return
-        
-        print("✅ Initial board state captured, waiting for move...")
-        
-        # Poll until we detect a change or it's no longer Black's turn
-        attempts = 0
-        max_attempts = 1200  # 10 minutes at 0.5s intervals
-        
-        while game.get_turn() == "black" and attempts < max_attempts:
-            # Wait a moment between checks
-            time.sleep(0.5)
-            attempts += 1
+    while True:
+        try:
+            current_turn = game.get_turn()
             
-            # Print waiting message less frequently
-            if attempts % 60 == 0:
-                print(f"Still waiting for black's move... ({attempts/2} seconds)")
-            
-            # Read current state silently
-            current_state = get_current_board_state(verbose=False)
-            if not current_state:
-                continue
-            
-            # Check if a move was made
-            move = arduino.detect_move(initial_state, current_state)
-            if move:
-                print(f"💡 Detected black's move: {move}")
+            # Only monitor when it's black's turn
+            if current_turn == "black":
+                # If we just switched to black's turn, reset our state
+                if last_turn != "black":
+                    print("👁️ Black's turn - starting to monitor physical board")
+                    time.sleep(2)  # Give time for physical move to complete
+                    last_known_state = get_current_board_state(verbose=True)
+                    if not last_known_state:
+                        print("❌ Could not read initial board state")
+                        time.sleep(1)
+                        continue
+                    print("✅ Initial black board state captured")
                 
-                # Process the move
-                start = (6 - int(move[1]), ord(move[0]) - ord('a'))
-                end = (6 - int(move[4]), ord(move[3]) - ord('a'))
-                
-                if game.move(start, end):
-                    print(f"✅ Black's move applied: {move}")
+                # We have a valid last state, check for changes
+                if last_known_state:
+                    current_state = get_current_board_state(verbose=False)
+                    if not current_state:
+                        time.sleep(0.5)
+                        continue
                     
-                    # IMMEDIATELY broadcast the updated board
-                    sio.emit('update_board', {
-                        'board': game.get_board(),
-                        'turn': game.get_turn(),
-                        'last_move': game.get_last_move()
-                    })
-                    break
-                else:
-                    print("❌ Invalid move detected")
-        
-        if attempts >= max_attempts:
-            print("⚠️ Timed out waiting for black's move")
+                    # Check if a move was made
+                    move = arduino.detect_move(last_known_state, current_state)
+                    if move:
+                        print(f"💡 Detected black's move: {move}")
+                        
+                        # Process the move
+                        start = (6 - int(move[1]), ord(move[0]) - ord('a'))
+                        end = (6 - int(move[4]), ord(move[3]) - ord('a'))
+                        
+                        if game.move(start, end):
+                            print(f"✅ Black's move applied: {move}")
+                            
+                            # IMMEDIATELY broadcast the updated board
+                            sio.emit('update_board', {
+                                'board': game.get_board(),
+                                'turn': game.get_turn(),
+                                'last_move': game.get_last_move()
+                            })
+                            
+                            # Reset state for next turn
+                            last_known_state = None
             
-    except Exception as e:
-        print(f"❌ Error monitoring black's move: {e}")
-    finally:
-        active_black_monitoring = False
+            # Update last turn
+            last_turn = current_turn
+            
+            # Brief pause before next check
+            time.sleep(0.5)
+            
+        except Exception as e:
+            print(f"❌ Error in board monitor: {e}")
+            time.sleep(1)
 
 def get_current_board_state(verbose=False):
     """Helper function to get board state matrix from Arduino."""
@@ -226,6 +208,9 @@ if __name__ == '__main__':
         # Connect to Arduino before starting server
         print("🔌 Connecting to Arduino...")
         arduino.connect()
+        
+        # Start continuous board monitoring
+        start_continuous_monitoring()
         
         print("🚀 Starting server...")
         eventlet.wsgi.server(eventlet.listen(('127.0.0.1', 5000)), app)
