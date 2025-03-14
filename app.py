@@ -59,10 +59,10 @@ def make_move():
                 print("✅ Move command sent to Arduino")
                 
                 # Wait for Arduino to complete the move
-                if arduino.wait_for_move_completion():
-                    print("✅ Physical move completed")
-                else:
-                    print("⚠️ Timeout waiting for move completion")
+                # if arduino.wait_for_move_completion():
+                #     print("✅ Physical move completed")
+                # else:
+                #     print("⚠️ Timeout waiting for move completion")
             except Exception as e:
                 print(f"❌ Failed to send command to Arduino: {e}")
             
