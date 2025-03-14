@@ -3,12 +3,16 @@ import socketio
 import eventlet
 import converter as cv
 from board import game
+from arduino_controller import ArduinoController
 
 app = Flask(__name__)
 
 # Create SocketIO server with eventlet
 sio = socketio.Server(cors_allowed_origins="*")
 app.wsgi_app = socketio.WSGIApp(sio, app.wsgi_app)
+
+# Initialize Arduino controller globally
+arduino = ArduinoController()
 
 @app.route('/')
 def index():
@@ -37,10 +41,17 @@ def make_move():
             physical_command = cv.chess_to_physical_coords(move)
             print(f"Physical command: {physical_command}")
             
-            # TODO: Send physical_command to Arduino
-            # This is where you'd add code to communicate with the Arduino
+            try:
+                # Send command to Arduino
+                response = arduino.send_command(physical_command)
+                if response and "OK" in response:
+                    print("✅ Move executed successfully")
+                else:
+                    print("⚠️ Arduino didn't acknowledge the move")
+            except Exception as e:
+                print(f"❌ Failed to send command to Arduino: {e}")
             
-            # Broadcast the updated board to all connected clients
+            # Broadcast the updated board to all clients
             sio.emit('update_board', {
                 'board': game.get_board(),
                 'turn': game.get_turn(),
@@ -90,6 +101,15 @@ def handle_move(sid, data):
         sio.emit('move_rejected', {'message': 'Incorrect move format'}, room=sid)
 
 if __name__ == '__main__':
-    # Start server with eventlet
-    eventlet.wsgi.server(eventlet.listen(('localhost', 5000)), app)
+    try:
+        # Connect to Arduino before starting server
+        print("🔌 Connecting to Arduino...")
+        arduino.connect()
+        print("🚀 Starting server...")
+        eventlet.wsgi.server(eventlet.listen(('127.0.0.1', 5000)), app)
+    except Exception as e:
+        print(f"❌ Error: {e}")
+    finally:
+        # Make sure to close Arduino connection when server stops
+        arduino.close()
 
