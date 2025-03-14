@@ -151,7 +151,7 @@ def handle_black_turn():
     
     while game.get_turn() == "black" and not move_detected and attempts < max_attempts:
         # Wait a moment between checks
-        time.sleep(0.5)
+        time.sleep(1)
         attempts += 1
         
         # Print waiting message less frequently (every 30 seconds)
