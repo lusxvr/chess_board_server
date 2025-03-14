@@ -110,7 +110,7 @@ def monitor_physical_board():
         try:
             # Only monitor when it's black's turn
             if game.get_turn() == "black":
-                # Read current state from Arduino
+                # Read current state from Arduino by sending READ_BOARD command
                 state_string = arduino.read_board_state()
                 
                 if state_string:
@@ -123,7 +123,7 @@ def monitor_physical_board():
                         if move:
                             print(f"Detected move from physical board: {move}")
                             
-                            # Process the move through the same handler we use for web moves
+                            # Process the move
                             start = (6 - int(move[1]), ord(move[0]) - ord('a'))
                             end = (6 - int(move[4]), ord(move[3]) - ord('a'))
                             
@@ -140,6 +140,10 @@ def monitor_physical_board():
                     
                     # Update previous state for next comparison
                     prev_state = current_state
+            else:
+                # Reset previous state when it's not black's turn
+                # This ensures we get a fresh comparison when black's turn begins
+                prev_state = None
             
             # Wait a short time before checking again
             time.sleep(0.5)

@@ -41,7 +41,7 @@ class ArduinoController:
             return False
 
     def send_command(self, command):
-        """Send a command to Arduino and wait for acknowledgment"""
+        """Send a command to Arduino without waiting for acknowledgment"""
         if not self.serial:
             raise Exception("Not connected to Arduino!")
         
@@ -50,13 +50,13 @@ class ArduinoController:
             command = command + '\n'
             self.serial.write(command.encode())
             
-            # Wait for acknowledgment from Arduino
-            response = self.serial.readline().decode().strip()
-            print(f"Arduino response: {response}")
-            return response
+            # Just wait a short time for the command to be processed
+            time.sleep(0.1)
+            
+            return True
         except Exception as e:
             print(f"❌ Error sending command: {e}")
-            return None
+            return False
 
     def close(self):
         """Close the serial connection"""
