@@ -78,11 +78,11 @@ class ArduinoController:
             print("Sending READ_BOARD command to Arduino...")
             
             # Send command with proper line ending
-            self.serial.write(b"READ_BOARD\n")
-            self.serial.flush()  # Ensure all data is written
+            self.send_command("READ_BOARD")
+            #self.serial.flush()  # Ensure all data is written
             
             # Give Arduino time to process (increase if necessary)
-            time.sleep(0.5)  # Increased wait time
+            t#ime.sleep(0.5)  # Increased wait time
             
             # Check if data is available before reading
             available = self.serial.in_waiting
@@ -160,3 +160,14 @@ class ArduinoController:
             pass
         
         return None
+
+    def wait_for_move_completion(self, timeout=30):
+        """Wait for the Arduino to complete a move"""
+        start_time = time.time()
+        while time.time() - start_time < timeout:
+            if self.serial.in_waiting > 0:
+                response = self.serial.readline().decode().strip()
+                if response == "MOVE_COMPLETE":
+                    return True
+            time.sleep(0.1)
+        return False
