@@ -15,6 +15,9 @@ app.wsgi_app = socketio.WSGIApp(sio, app.wsgi_app)
 # Initialize Arduino controller globally
 arduino = ArduinoController()
 
+# Create a global variable to track pending physical moves
+pending_physical_move = None
+
 @app.route('/')
 def index():
     return render_template('index.html')
@@ -30,6 +33,8 @@ def get_board():
 @app.route('/move', methods=['POST'])
 def make_move():
     """Handle moves from the web interface."""
+    global pending_physical_move
+    
     move = request.form['move'].strip()
     print(f"Move received: {move}")
     
@@ -45,16 +50,52 @@ def make_move():
                 'last_move': game.get_last_move()
             })
             
-            # Trigger a separate Socket.IO event to handle the physical move
-            # This won't block the HTTP response
-            sio.emit('execute_physical_move', {
-                'move': move
-            })
+            # Queue the physical move to be executed after the response is sent
+            physical_command = cv.chess_to_physical_coords(move)
+            pending_physical_move = {
+                'command': physical_command,
+                'turn': game.get_turn()
+            }
             
             # Return success immediately
             return jsonify({'success': True, 'board': game.get_board()})
 
     return jsonify({'success': False})
+
+# Add a route that periodically checks for and executes pending physical moves
+@app.route('/execute_pending_move', methods=['GET'])
+def execute_pending_move():
+    """Execute any pending physical moves"""
+    global pending_physical_move
+    
+    if pending_physical_move:
+        command = pending_physical_move['command']
+        turn = pending_physical_move['turn']
+        
+        print(f"Executing pending physical move: {command}")
+        
+        try:
+            # Send command to Arduino
+            arduino.send_command(command)
+            print("✅ Move command sent to Arduino")
+            
+            # Wait for Arduino to complete the move
+            if arduino.wait_for_move_completion():
+                print("✅ Physical move completed")
+            else:
+                print("⚠️ Timeout waiting for move completion")
+        except Exception as e:
+            print(f"❌ Failed to send command to Arduino: {e}")
+        
+        # Clear the pending move
+        pending_physical_move = None
+        
+        # If it's black's turn, monitor the physical board
+        if turn == "black":
+            print("👁️ Black's turn - monitoring physical board")
+            handle_black_turn()
+    
+    return jsonify({'success': True})
 
 # WebSocket events
 @sio.event
@@ -236,34 +277,6 @@ def debug_arduino_communication():
 #                 return True
 #         time.sleep(0.1)
 #     return False
-
-# Add a Socket.IO event handler for executing physical moves
-@sio.on('execute_physical_move')
-def handle_physical_move(sid, data):
-    """Handle physical move execution without blocking the main request"""
-    move = data['move']
-    
-    # Convert chess move to physical coordinates
-    physical_command = cv.chess_to_physical_coords(move)
-    print(f"Physical command: {physical_command}")
-    
-    try:
-        # Send command to Arduino
-        arduino.send_command(physical_command)
-        print("✅ Move command sent to Arduino")
-        
-        # Wait for Arduino to complete the move
-        if arduino.wait_for_move_completion():
-            print("✅ Physical move completed")
-        else:
-            print("⚠️ Timeout waiting for move completion")
-    except Exception as e:
-        print(f"❌ Failed to send command to Arduino: {e}")
-    
-    # If it's black's turn after the move, monitor the physical board
-    if game.get_turn() == "black":
-        print("👁️ Black's turn - monitoring physical board")
-        handle_black_turn()
 
 if __name__ == '__main__':
     try:

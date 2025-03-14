@@ -143,6 +143,15 @@
             }
         }
     
+        function checkPendingMoves() {
+            fetch('/execute_pending_move')
+                .then(response => response.json())
+                .catch(error => console.error('Error checking pending moves:', error));
+        }
+    
+        // Call every 500ms
+        setInterval(checkPendingMoves, 500);
+    
         fetchBoard();  // Load the board on startup
     </script>    
 </body>
