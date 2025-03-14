@@ -3,7 +3,7 @@ import serial.tools.list_ports
 import time
 
 class ArduinoController:
-    def __init__(self, baud_rate=9600):
+    def __init__(self, baud_rate=115200):
         self.serial = None
         self.baud_rate = baud_rate
         
