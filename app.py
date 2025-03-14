@@ -34,17 +34,18 @@ def make_move():
     print(f"Move received: {move}")
     
     if len(move) == 5 and move[2] == ' ':
-        # Parse chess notation to board coordinates
-        # For A6 at (0,0):
-        # - 'a' -> column 0, 'b' -> column 1, etc.
-        # - '6' -> row 0, '5' -> row 1, etc.
-        start_file, start_rank = move[0], move[1]
-        end_file, end_rank = move[3], move[4]
-        
-        start = (6 - int(start_rank), ord(start_file) - ord('a'))
-        end = (6 - int(end_rank), ord(end_file) - ord('a'))
+        start = (6 - int(move[1]), ord(move[0]) - ord('a'))
+        end = (6 - int(move[4]), ord(move[3]) - ord('a'))
 
         if game.move(start, end):
+            # IMMEDIATELY broadcast the updated board to all clients
+            # This ensures the web interface updates right away
+            sio.emit('update_board', {
+                'board': game.get_board(),
+                'turn': game.get_turn(),
+                'last_move': game.get_last_move()
+            })
+            
             # Convert chess move to physical coordinates
             physical_command = cv.chess_to_physical_coords(move)
             print(f"Physical command: {physical_command}")
@@ -54,20 +55,13 @@ def make_move():
                 arduino.send_command(physical_command)
                 print("✅ Move command sent to Arduino")
                 
-                # Wait for Arduino to complete the move (implement this in arduino_controller.py)
+                # Wait for Arduino to complete the move
                 if arduino.wait_for_move_completion():
                     print("✅ Physical move completed")
                 else:
                     print("⚠️ Timeout waiting for move completion")
             except Exception as e:
                 print(f"❌ Failed to send command to Arduino: {e}")
-            
-            # Broadcast the updated board to all clients
-            sio.emit('update_board', {
-                'board': game.get_board(),
-                'turn': game.get_turn(),
-                'last_move': game.get_last_move()
-            })
             
             # If it's now black's turn, monitor the physical board
             if game.get_turn() == "black":
@@ -99,26 +93,20 @@ def handle_move(sid, data):
     print(f"📥 Move received from client {sid}: {move}")
 
     if len(move) == 5 and move[2] == ' ':
-        # Parse chess notation to board coordinates
-        # For A6 at (0,0):
-        # - 'a' -> column 0, 'b' -> column 1, etc.
-        # - '6' -> row 0, '5' -> row 1, etc.
-        start_file, start_rank = move[0], move[1]
-        end_file, end_rank = move[3], move[4]
-        
-        start = (6 - int(start_rank), ord(start_file) - ord('a'))
-        end = (6 - int(end_rank), ord(end_file) - ord('a'))
+        start = (6 - int(move[1]), ord(move[0]) - ord('a'))
+        end = (6 - int(move[4]), ord(move[3]) - ord('a'))
 
         if game.move(start, end):
             print(f"✅ Move applied: {move}")
-            # Broadcast the updated board to all connected clients
+            
+            # IMMEDIATELY broadcast the updated board to all connected clients
             sio.emit('update_board', {
                 'board': game.get_board(),
                 'turn': game.get_turn(),
                 'last_move': game.get_last_move()
             })
             
-            # If it's now black's turn, monitor the physical board
+            # Physical actions and black's turn handling follow after the broadcast
             if game.get_turn() == "black":
                 print("👁️ Black's turn - monitoring physical board")
                 handle_black_turn()
