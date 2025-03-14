@@ -161,7 +161,7 @@ class ArduinoController:
         
         return None
 
-    def wait_for_move_completion(self, timeout=30):
+    def wait_for_move_completion(self, timeout=300):
         """Wait for the Arduino to complete a move"""
         start_time = time.time()
         while time.time() - start_time < timeout:

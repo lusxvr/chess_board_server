@@ -123,7 +123,7 @@ def handle_black_turn():
     print("🔍 Starting to monitor physical board for black's move...")
     
     # Debug the Arduino communication
-    debug_arduino_communication()
+    #debug_arduino_communication()
     
     # Take an initial snapshot of the board
     initial_state = get_current_board_state()
