@@ -70,17 +70,35 @@ class ArduinoController:
             raise Exception("Not connected to Arduino!")
         
         try:
+            # Flush both input and output buffers
+            self.serial.reset_input_buffer()
+            self.serial.reset_output_buffer()
+            
             # Send command to request board state
-            self.serial.write(b'READ_BOARD\n')
+            command = "READ_BOARD\n"
+            self.serial.write(command.encode())
+            self.serial.flush()  # Ensure command is sent immediately
             
-            # Wait for response with the 36-digit integer
-            response = self.serial.readline().decode().strip()
+            # Wait for Arduino to process the command
+            time.sleep(0.2)
             
-            if response and len(response) == 36:
-                return response
+            # Check if data is available
+            if self.serial.in_waiting > 0:
+                # Read response - expect a 36-character string of 1s and 0s
+                response = self.serial.readline().decode().strip()
+                print(f"Raw response from Arduino: '{response}'")
+                
+                # Check for valid response format (36 characters of 0s and 1s)
+                if response and len(response) == 36 and all(c in '01' for c in response):
+                    print(f"✅ Valid board state received: {response}")
+                    return response
+                else:
+                    print(f"⚠️ Invalid board state format: '{response}', length: {len(response)}")
+                    return None
             else:
-                print(f"⚠️ Invalid board state response: {response}")
+                print("⚠️ No data received from Arduino")
                 return None
+            
         except Exception as e:
             print(f"❌ Error reading board state: {e}")
             return None
@@ -99,6 +117,7 @@ class ArduinoController:
                 row.append(int(state_string[index]))
             matrix.append(row)
         
+        print(f"Converted to matrix: {matrix}")
         return matrix
 
     def detect_move(self, previous_state, current_state):

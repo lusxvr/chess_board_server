@@ -178,11 +178,17 @@ def wait_for_physical_move():
 def get_current_board_state():
     """Helper function to get board state matrix from Arduino"""
     try:
+        print("Requesting board state from Arduino...")
+        
         # Read state from Arduino
         state_string = arduino.read_board_state()
+        
         if state_string and len(state_string) == 36:
+            print(f"Converting board state to matrix: {state_string}")
             return arduino.board_state_to_matrix(state_string)
-        return None
+        else:
+            print(f"Failed to get valid board state (received: {state_string})")
+            return None
     except Exception as e:
         print(f"Error reading board state: {e}")
         return None
