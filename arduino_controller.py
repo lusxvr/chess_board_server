@@ -70,37 +70,40 @@ class ArduinoController:
             raise Exception("Not connected to Arduino!")
         
         try:
-            # Flush both input and output buffers
+            # Clear buffers and ensure connection is ready
             self.serial.reset_input_buffer()
             self.serial.reset_output_buffer()
             
-            # Send command to request board state
-            command = "READ_BOARD\n"
-            self.serial.write(command.encode())
-            self.serial.flush()  # Ensure command is sent immediately
+            # Add debugging information
+            print("Sending READ_BOARD command to Arduino...")
             
-            # Wait for Arduino to process the command
-            time.sleep(0.2)
+            # Send command with proper line ending
+            self.serial.write(b"READ_BOARD\n")
+            self.serial.flush()  # Ensure all data is written
             
-            # Check if data is available
-            if self.serial.in_waiting > 0:
-                # Read response - expect a 36-character string of 1s and 0s
+            # Give Arduino time to process (increase if necessary)
+            time.sleep(0.5)  # Increased wait time
+            
+            # Check if data is available before reading
+            available = self.serial.in_waiting
+            print(f"Bytes available to read: {available}")
+            
+            if available > 0:
+                # Read response line
                 response = self.serial.readline().decode().strip()
                 print(f"Raw response from Arduino: '{response}'")
                 
-                # Check for valid response format (36 characters of 0s and 1s)
+                # Check for a valid 36-character string of 0s and 1s
                 if response and len(response) == 36 and all(c in '01' for c in response):
-                    print(f"✅ Valid board state received: {response}")
                     return response
                 else:
-                    print(f"⚠️ Invalid board state format: '{response}', length: {len(response)}")
-                    return None
+                    print(f"Invalid response format. Length: {len(response)}, Content: '{response}'")
             else:
-                print("⚠️ No data received from Arduino")
-                return None
+                print("No data received from Arduino")
             
+            return None
         except Exception as e:
-            print(f"❌ Error reading board state: {e}")
+            print(f"Error reading board state: {e}")
             return None
 
     def board_state_to_matrix(self, state_string):
