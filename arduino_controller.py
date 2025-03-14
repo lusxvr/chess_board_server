@@ -82,7 +82,7 @@ class ArduinoController:
             #self.serial.flush()  # Ensure all data is written
             
             # Give Arduino time to process (increase if necessary)
-            t#ime.sleep(0.5)  # Increased wait time
+            #ime.sleep(0.5)  # Increased wait time
             
             # Check if data is available before reading
             available = self.serial.in_waiting
