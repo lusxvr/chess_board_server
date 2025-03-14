@@ -117,14 +117,13 @@ class ArduinoController:
         """
         Convert the 36-digit string to a 6x6 matrix representation
         
-        The sensors are likely arranged with A1 at index 0, not A6
-        We need to remap to have A6 at (0,0) in our matrix
+        The sensors appear to be wired with rows and columns transposed
+        We need to correct this by transposing the matrix
         """
         if not state_string or len(state_string) != 36:
             return None
         
-        # First, create a temporary 6x6 matrix from the string
-        # assuming the string reads from A1 (bottom-left) to F6 (top-right)
+        # First build a matrix from the string (as it's currently wired)
         temp_matrix = []
         for i in range(6):
             row = []
@@ -133,9 +132,17 @@ class ArduinoController:
                 row.append(int(state_string[index]))
             temp_matrix.append(row)
         
-        # Now flip the matrix vertically to have A6 at (0,0)
-        # This puts top row (rank 6) at index 0
-        matrix = list(reversed(temp_matrix))
+        # Now transpose the matrix (swap rows and columns)
+        # This corrects the orientation issue
+        matrix = []
+        for j in range(6):
+            new_row = []
+            for i in range(6):
+                new_row.append(temp_matrix[i][j])
+            matrix.append(new_row)
+        
+        # If necessary, flip the matrix vertically to have A6 at (0,0)
+        matrix = list(reversed(matrix))
         
         return matrix
 
@@ -201,3 +208,12 @@ class ArduinoController:
                 result += str(cell)
         
         return result
+
+    def print_board_state(self, matrix):
+        """Print a visual representation of the 6x6 matrix as a chess board"""
+        print("\nCurrent Board State:")
+        print("  a b c d e f")
+        for i in range(6):
+            row = " ".join(str(cell) for cell in matrix[i])
+            print(f"{6-i} {row}")
+        print()

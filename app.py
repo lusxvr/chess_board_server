@@ -49,13 +49,6 @@ def make_move():
             physical_command = cv.chess_to_physical_coords(move)
             print(f"Physical command: {physical_command}")
             
-            # Broadcast the updated board to all clients
-            sio.emit('update_board', {
-                'board': game.get_board(),
-                'turn': game.get_turn(),
-                'last_move': game.get_last_move()
-            })
-
             try:
                 # Send command to Arduino
                 arduino.send_command(physical_command)
@@ -68,7 +61,13 @@ def make_move():
                     print("⚠️ Timeout waiting for move completion")
             except Exception as e:
                 print(f"❌ Failed to send command to Arduino: {e}")
-        
+            
+            # Broadcast the updated board to all clients
+            sio.emit('update_board', {
+                'board': game.get_board(),
+                'turn': game.get_turn(),
+                'last_move': game.get_last_move()
+            })
             
             # If it's now black's turn, monitor the physical board
             if game.get_turn() == "black":
@@ -147,7 +146,7 @@ def handle_black_turn():
     # Poll until we detect a change or it's no longer Black's turn
     move_detected = False
     attempts = 0
-    max_attempts = 600  # 300 seconds at 0.5s intervals
+    max_attempts = 100  # 100 seconds at 1s intervals
     
     while game.get_turn() == "black" and not move_detected and attempts < max_attempts:
         # Wait a moment between checks
@@ -156,7 +155,7 @@ def handle_black_turn():
         
         # Print waiting message less frequently (every 30 seconds)
         if attempts % 10 == 0:
-            print(f"Still waiting for physical move... ({attempts/2} seconds)")
+            print(f"Still waiting for physical move... ({attempts/2} seconds / {max_attempts/2} seconds)")
         
         # Read current state silently (non-verbose)
         current_state = get_current_board_state(verbose=False)
